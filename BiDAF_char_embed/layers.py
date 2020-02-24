@@ -23,20 +23,83 @@ class Embedding(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, hidden_size, drop_prob):
+    def __init__(self, word_vectors, char_vectors, hidden_size, drop_prob, out_channels=100):
         super(Embedding, self).__init__()
         self.drop_prob = drop_prob
-        self.embed = nn.Embedding.from_pretrained(word_vectors)
-        self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
+        self.word_emb_dim   = word_vectors.size(1)
+        self.char_emb_dim   = char_vectors.size(1)
+        self.size_char_vocab= char_vectors.size(0)
+        self.out_channels   = out_channels
+        
+        self.embed_word = nn.Embedding.from_pretrained(word_vectors)
+        self.embed_char = nn.Embedding(num_embeddings=self.size_char_vocab,
+                                       embedding_dim=self.char_emb_dim)
+        
+        self.cnn=CNN(self.char_emb_dim, output_channels=self.out_channels)
+        
+        self.proj = nn.Linear(self.word_emb_dim+self.out_channels, hidden_size, bias=False)
         self.hwy = HighwayEncoder(2, hidden_size)
 
-    def forward(self, x):
-        emb = self.embed(x)   # (batch_size, seq_len, embed_size)
+    def forward(self, x_word , x_char):
+        emb_w = self.embed_word(x_word)   # (batch_size, seq_len, word_emb_dim)
+        emb_c = self.embed_char(x_char)   # (batch_size, seq_len, word_len ,char_emb_dim)
+        
+        #use cnn to have character level representation
+        batch_size, seq_len, word_len, _ = emb_c.shape
+        view_shape = (batch_size * seq_len, word_len, self.char_emb_dim)
+        emb_c      = emb_c.view(view_shape).transpose(1,2)
+        emb_c_conv = self.cnn(emb_c)
+        emb_c_conv = emb_c_conv.view(batch_size, seq_len, self.out_channels)
+        
+        #concatenate both embedding with the righ dim
+        emb = torch.cat((emb_w,emb_c_conv),dim=-1)
+        
         emb = F.dropout(emb, self.drop_prob, self.training)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
         return emb
+
+class CNN(nn.Module):
+    """
+        This class implements the 1D-Convolution components of the CharEmbedding model
+    """
+    
+    def __init__(self, emb_size, output_channels, kernel_size=5, padding=1):
+        """
+            Init the Convolution Network
+            @param emb_size: The size of the char embedding
+            @param kernel_size: The number of char embedding (letter) we want to consider when we
+                                aply the convolution filter
+            @param output_channels: The number of filter apply to each pass
+        """
+        
+        super(CNN, self).__init__()
+        
+        self.conv1D=nn.Conv1d(in_channels=emb_size,out_channels=output_channels,
+                              kernel_size=kernel_size,padding=padding,
+                              bias=True)
+    
+    def forward(self,inpt):
+        """
+            Applies a 1d-convolutional filter to every window of size kernel_size to an input tensor of
+            size (sentence_length*BATCH_SIZE,  e_char, word_length) to get a new tensor of size
+            (sentence_length*BATCH_SIZE, output_channels, word_length-kernel_size+3)
+            Then we apply a max_pool to have identical lenght word embeddings.
+            
+            @param inpt: Tensor of shape (sentence_length*BATCH_SIZE, e_char, word_length) representing
+                        char embedding (of size e_char) for each char in each word in each batch in each sentences
+                        
+            @param x_conv_out: Tensor of shape (sentence_length*BATCH_SIZE, output_channels)
+                                which is the current word embedding before highway (note that the dimension
+                                of all words are equal to output_channels whichever size of the word).
+        """
+                
+        x_conv=F.relu(self.conv1D(inpt))
+        x_conv_out,_=torch.max(x_conv,-1)
+        
+        return x_conv_out
+
 
 
 class HighwayEncoder(nn.Module):

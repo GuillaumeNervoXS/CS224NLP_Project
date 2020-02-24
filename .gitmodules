@@ -1,0 +1,3 @@
+[submodule "squad"]
+	path = squad
+	url = git@github.com:minggg/squad.git

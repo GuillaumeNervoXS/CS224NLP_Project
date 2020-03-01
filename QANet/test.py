@@ -43,14 +43,37 @@ def main(args):
     char_vectors = util.torch_from_json(args.char_emb_file)
     # Get model
     log.info('Building model...')
-    #model = BiDAF(word_vectors=word_vectors,hidden_size=args.hidden_size)
-    model = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device)
-    model = nn.DataParallel(model, gpu_ids)
-    log.info(f'Loading checkpoint from {args.load_path}...')
-    model = util.load_model(model, args.load_path, gpu_ids, return_step=False)
-    model = model.to(device)
-    model.eval()
+    nbr_model=0
+    if(args.load_path_baseline):
+        model_baseline = BiDAF(word_vectors=word_vectors,hidden_size=args.hidden_size)
+        model_baseline = nn.DataParallel(model_baseline, gpu_ids)
+        log.info(f'Loading checkpoint from {args.load_path_baseline}...')
+        model_baseline = util.load_model(model_baseline, args.load_path_baseline, gpu_ids, return_step=False)
+        model_baseline = model_baseline.to(device)
+        model_baseline.eval()
+        nll_meter_baseline = util.AverageMeter()
+        nbr_model+=1
+    
+    if(args.load_path_qanet):
+        model_bidaf = BiDAF(word_vectors=word_vectors,char_vectors=char_vectors,hidden_size=args.hidden_size)
+        model_bidaf = nn.DataParallel(model_bidaf, gpu_ids)
+        log.info(f'Loading checkpoint from {args.load_path_bidaf}...')       
+        model_bidaf = util.load_model(model_bidaf, args.load_path_bidaf, gpu_ids, return_step=False)
+        model_bidaf = model_bidaf.to(device)
+        model_bidaf.eval()
+        nll_meter_bidaf = util.AverageMeter()
+        nbr_model+=1
 
+    if(args.load_path_qanet):
+        model_qanet = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device)
+        model_qanet = nn.DataParallel(model_qanet, gpu_ids)
+        log.info(f'Loading checkpoint from {args.load_qanet}...')
+        model_qanet = util.load_model(model_qanet, args.load_path_qanet, gpu_ids, return_step=False)
+        model_qanet = model_qanet.to(device)
+        model_qanet.eval()
+        nll_meter_qanet = util.AverageMeter()
+        nbr_model+=1
+        
     # Get data loader
     log.info('Building dataset...')
     record_file = vars(args)[f'{args.split}_record_file']
@@ -63,7 +86,6 @@ def main(args):
 
     # Evaluate
     log.info(f'Evaluating on {args.split} split...')
-    nll_meter = util.AverageMeter()
     pred_dict = {}  # Predictions for TensorBoard
     sub_dict = {}   # Predictions for submission
     eval_file = vars(args)[f'{args.split}_eval_file']
@@ -79,14 +101,37 @@ def main(args):
             qc_idxs = qc_idxs.to(device)
             batch_size = cw_idxs.size(0)
 
-            # Forward
-            log_p1, log_p2 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             y1, y2 = y1.to(device), y2.to(device)
-            loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
-            nll_meter.update(loss.item(), batch_size)
-
-            # Get F1 and EM scores
-            p1, p2 = log_p1.exp(), log_p2.exp()
+            l_p1,l_p2=[],[]
+            # Forward
+            if(args.load_path_baseline):
+                log_p1_baseline, log_p2_baseline = model_baseline(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
+                loss_baseline = F.nll_loss(log_p1_baseline, y1) + F.nll_loss(log_p2_baseline, y2)
+                nll_meter_bidaf.update(loss_baseline.item(), batch_size)
+                l_p1+=[log_p1_baseline.exp()]
+                l_p2+=[log_p2_baseline.exp()]
+            if(args.load_path_qanet):
+                log_p1_qanet, log_p2_qanet = model_qanet(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
+                loss_qanet = F.nll_loss(log_p1_qanet, y1) + F.nll_loss(log_p2_qanet, y2)
+                nll_meter_qanet.update(loss_qanet.item(), batch_size)
+                # Get F1 and EM scores
+                l_p1+=[log_p1_qanet.exp()]
+                l_p2+=[log_p2_qanet.exp()]
+            if(args.load_path_bidaf):
+                log_p1_bidaf, log_p2_bidaf = model_bidaf(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
+                loss_bidaf = F.nll_loss(log_p1_bidaf, y1) + F.nll_loss(log_p2_bidaf, y2)
+                nll_meter_bidaf.update(loss_bidaf.item(), batch_size)
+                l_p1+=[log_p1_bidaf.exp()]
+                l_p2+=[log_p2_bidaf.exp()]
+            
+            assert((len(l_p1) == nbr_model) && (len(l_p2) == nbr_model), "List of probabilities p1:{} or p2:{} are not the same size as the number of models {}".format(len(l_p1), len(l_p2),nbr_model ))
+            
+            for i in range(nbr_model):
+                p1+=l_p1[i]
+                p2+=l_p2[i]
+            p1/=nbr_model
+            p2/=nbr_model
+            
             starts, ends = util.discretize(p1, p2, args.max_ans_len, args.use_squad_v2)
 
             # Log info

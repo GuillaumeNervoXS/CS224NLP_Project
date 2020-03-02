@@ -47,7 +47,7 @@ def main(args):
     log.info('Building model...')
     nbr_model=0
     if(args.load_path_baseline):
-        model_baseline = BiDAF(word_vectors=word_vectors,hidden_size=args.hidden_size)
+        model_baseline = Baseline(word_vectors=word_vectors,hidden_size=args.hidden_size)
         model_baseline = nn.DataParallel(model_baseline, gpu_ids)
         log.info(f'Loading checkpoint from {args.load_path_baseline}...')
         model_baseline = util.load_model(model_baseline, args.load_path_baseline, gpu_ids, return_step=False)

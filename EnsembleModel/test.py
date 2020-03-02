@@ -143,7 +143,7 @@ def main(args):
                 # No labels for the test set, so NLL would be invalid
                 if(args.load_path_qanet):
                     progress_bar.set_postfix(NLL=nll_meter_qanet.avg)
-                if(args.load_path_bidaf):
+                elif(args.load_path_bidaf):
                     progress_bar.set_postfix(NLL=nll_meter_bidaf.avg)
                 else:
                     progress_bar.set_postfix(NLL=nll_meter_baseline.avg)

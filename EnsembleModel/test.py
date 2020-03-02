@@ -112,7 +112,7 @@ def main(args):
             l_p1,l_p2=[],[]
             # Forward
             if(args.load_path_baseline):
-                log_p1_baseline, log_p2_baseline = model_baseline(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
+                log_p1_baseline, log_p2_baseline = model_baseline(cw_idxs, cc_idxs)
                 loss_baseline = F.nll_loss(log_p1_baseline, y1) + F.nll_loss(log_p2_baseline, y2)
                 nll_meter_bidaf.update(loss_baseline.item(), batch_size)
                 l_p1+=[log_p1_baseline.exp()]

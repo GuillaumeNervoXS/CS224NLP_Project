@@ -124,9 +124,8 @@ def main(args):
                 l_p1+=[log_p1_bidaf.exp()]
                 l_p2+=[log_p2_bidaf.exp()]
             
-            assert((len(l_p1) == nbr_model) && (len(l_p2) == nbr_model), "List of probabilities p1:{} or p2:{} are not the same size as the number of models {}".format(len(l_p1), len(l_p2),nbr_model ))
-            
-            for i in range(nbr_model):
+            p1,p2=l_p1[0],l_p2[0]
+            for i in range(1,nbr_model):
                 p1+=l_p1[i]
                 p2+=l_p2[i]
             p1/=nbr_model
@@ -138,7 +137,7 @@ def main(args):
             progress_bar.update(batch_size)
             if args.split != 'test':
                 # No labels for the test set, so NLL would be invalid
-                progress_bar.set_postfix(NLL=nll_meter.avg)
+                progress_bar.set_postfix(NLL=nll_meter_qanet.avg)
 
             idx2pred, uuid2pred = util.convert_tokens(gold_dict,
                                                       ids.tolist(),
@@ -151,7 +150,7 @@ def main(args):
     # Log results (except for test set, since it does not come with labels)
     if args.split != 'test':
         results = util.eval_dicts(gold_dict, pred_dict, args.use_squad_v2)
-        results_list = [('NLL', nll_meter.avg),
+        results_list = [('NLL', nll_meter_qanet.avg),
                         ('F1', results['F1']),
                         ('EM', results['EM'])]
         if args.use_squad_v2:

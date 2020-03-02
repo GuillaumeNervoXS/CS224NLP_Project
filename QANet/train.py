@@ -49,12 +49,12 @@ def main(args):
     
     #model = BiDAF(word_vectors=word_vectors,hidden_size=args.hidden_size,drop_prob=args.drop_prob)
     model = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device,
-                  hidden_size=64,
-                 n_emb_enc_blocks=1,n_mod_enc_blocks=1,
-                 n_conv_emb_enc=2,n_conv_mod_enc=2,
+                  hidden_size=args.hidden_size,                                                                                          n_emb_enc_blocks=args.n_emb_blocks,n_mod_enc_blocks=args.n_mod_blocks,
+                 n_conv_emb_enc=args.n_conv_emb,n_conv_mod_enc=args.n_conv_mod,
                  drop_prob_word=0.1,drop_prob_char=0.05,
                  kernel_size_emb_enc_block=7, kernel_size_mod_enc_block=7,
-                 n_heads=1)
+                 n_heads=args.n_heads)
+
     
     
     model = nn.DataParallel(model, args.gpu_ids)

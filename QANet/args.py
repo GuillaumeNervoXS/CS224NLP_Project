@@ -134,7 +134,10 @@ def get_train_args():
                         type=float,
                         default=0.999,
                         help='Decay rate for exponential moving average of parameters.')
-
+    parser.add_argument('--beta_1', type=float, default=0.8, help='Beta_1 for the Adam Optimizer.')
+    parser.add_argument('--beta_2',type=float,default=0.999,help='Beta_2 for the Adam Optimizer.')
+    parser.add_argument('--epsilon',type=float,default=10e-7,help='Epsilon for the Adam Optimizer.')
+    
     args = parser.parse_args()
 
     if args.metric_name == 'NLL':
@@ -238,7 +241,35 @@ def add_train_test_args(parser):
                         type=int,
                         default=10,
                         help='Number of examples to visualize in TensorBoard.')
-    parser.add_argument('--load_path',
+    parser.add_argument('--load_path_baseline',
                         type=str,
                         default=None,
-                        help='Path to load as a model checkpoint.')
+                        help='Path to load baseline as a model checkpoint.')
+    parser.add_argument('--load_path_bidaf',
+                        type=str,
+                        default=None,
+                        help='Path to load BiDAF as a model checkpoint.')
+    parser.add_argument('--load_path_qanet',
+                        type=str,
+                        default=None,
+                        help='Path to load QANet as a model checkpoint.')
+    parser.add_argument('--n_emb_blocks',
+                        type=int,
+                        default=1,
+                        help='Number of embedding encoder blocks.')
+    parser.add_argument('--n_mod_blocks',
+                        type=int,
+                        default=7,
+                        help='Number of model encoder blocks.')
+    parser.add_argument('--n_heads',
+                        type=int,
+                        default=8,
+                        help='Number of heads.')
+    parser.add_argument('--n_conv_emb',
+                        type=int,
+                        default=4,
+                        help='Number of convolutional layers in the embedding encoder blocks.')
+    parser.add_argument('--n_conv_mod',
+                        type=int,
+                        default=2,
+                        help='Number of convolutional layers in the modeling encoder blocks.')

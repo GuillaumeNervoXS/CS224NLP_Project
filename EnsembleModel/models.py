@@ -6,7 +6,7 @@ Author:
 
 import layersBaseline as layBas
 import layersBidaf as layBid
-import layersQANet as layQ
+import layersQanet as layQ
 import torch
 import torch.nn as nn
 

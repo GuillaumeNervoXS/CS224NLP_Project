@@ -54,7 +54,7 @@ def main(args):
         nll_meter_baseline = util.AverageMeter()
         nbr_model+=1
     
-    if(args.load_path_qanet):
+    if(args.load_path_bidaf):
         model_bidaf = BiDAF(word_vectors=word_vectors,char_vectors=char_vectors,hidden_size=args.hidden_size)
         model_bidaf = nn.DataParallel(model_bidaf, gpu_ids)
         log.info(f'Loading checkpoint from {args.load_path_bidaf}...')       
@@ -65,7 +65,12 @@ def main(args):
         nbr_model+=1
 
     if(args.load_path_qanet):
-        model_qanet = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device)
+        model_qanet = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device,
+                            hidden_size=args.hidden_size, batch_size=args.batch_size ,
+                            n_heads=args.n_heads, n_conv_emb=args.n_conv_emb,
+                            n_conv_mod=args.n_conv_mod, n_emb_blocks=args.n_emb_blocks,
+                            n_mod_blocks=args.n_mod_blocks)
+        
         model_qanet = nn.DataParallel(model_qanet, gpu_ids)
         log.info(f'Loading checkpoint from {args.load_qanet}...')
         model_qanet = util.load_model(model_qanet, args.load_path_qanet, gpu_ids, return_step=False)

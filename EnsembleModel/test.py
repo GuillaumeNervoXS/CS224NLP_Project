@@ -143,7 +143,12 @@ def main(args):
             progress_bar.update(batch_size)
             if args.split != 'test':
                 # No labels for the test set, so NLL would be invalid
-                progress_bar.set_postfix(NLL=nll_meter_qanet.avg)
+                if(args.load_path_qanet):
+                    progress_bar.set_postfix(NLL=nll_meter_qanet.avg)
+                if(args.load_path_bidaf):
+                    progress_bar.set_postfix(NLL=nll_meter_bidaf.avg)
+                else:
+                    progress_bar.set_postfix(NLL=nll_meter_baseline.avg)
 
             idx2pred, uuid2pred = util.convert_tokens(gold_dict,
                                                       ids.tolist(),
@@ -156,7 +161,13 @@ def main(args):
     # Log results (except for test set, since it does not come with labels)
     if args.split != 'test':
         results = util.eval_dicts(gold_dict, pred_dict, args.use_squad_v2)
-        results_list = [('NLL', nll_meter_qanet.avg),
+        if(args.load_path_qanet):
+            meter_avg=nll_meter_qanet.avg
+        if(args.load_path_bidaf):
+            meter_avg=nll_meter_bidaf.avg
+        else:
+            meter_avg=nll_meter_baseline.avg
+        results_list = [('NLL', meter_avg),
                         ('F1', results['F1']),
                         ('EM', results['EM'])]
         if args.use_squad_v2:

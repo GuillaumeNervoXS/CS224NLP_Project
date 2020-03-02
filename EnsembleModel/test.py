@@ -70,8 +70,8 @@ def main(args):
         model_qanet = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device,
                             hidden_size=args.hidden_size,
                             n_heads=args.n_heads, n_conv_emb_enc=args.n_conv_emb,
-                            n_conv_mod_enc=args.n_conv_mod, n_emb_blocks=args.n_emb_blocks,
-                            n_mod_blocks=args.n_mod_blocks)
+                            n_conv_mod_enc=args.n_conv_mod, n_emb_enc_blocks=args.n_emb_blocks,
+                            n_mod_enc_blocks=args.n_mod_blocks)
         
         model_qanet = nn.DataParallel(model_qanet, gpu_ids)
         log.info(f'Loading checkpoint from {args.load_path_qanet}...')

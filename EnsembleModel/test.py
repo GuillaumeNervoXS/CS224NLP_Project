@@ -46,7 +46,6 @@ def main(args):
     # Get model
     log.info('Building model...')
     nbr_model=0
-    """
     if(args.load_path_baseline):
         model_baseline = Baseline(word_vectors=word_vectors,hidden_size=100)
         model_baseline = nn.DataParallel(model_baseline, gpu_ids)
@@ -56,7 +55,6 @@ def main(args):
         model_baseline.eval()
         nll_meter_baseline = util.AverageMeter()
         nbr_model+=1
-    """
     if(args.load_path_bidaf):
         model_bidaf = BiDAF(word_vectors=word_vectors,char_vectors=char_vectors,hidden_size=100)
         model_bidaf = nn.DataParallel(model_bidaf, gpu_ids)
@@ -112,14 +110,12 @@ def main(args):
             y1, y2 = y1.to(device), y2.to(device)
             l_p1,l_p2=[],[]
             # Forward
-            """
             if(args.load_path_baseline):
                 log_p1_baseline, log_p2_baseline = model_baseline(cw_idxs, cc_idxs)
                 loss_baseline = F.nll_loss(log_p1_baseline, y1) + F.nll_loss(log_p2_baseline, y2)
                 nll_meter_bidaf.update(loss_baseline.item(), batch_size)
                 l_p1+=[log_p1_baseline.exp()]
                 l_p2+=[log_p2_baseline.exp()]
-            """
             if(args.load_path_qanet):
                 log_p1_qanet, log_p2_qanet = model_qanet(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
                 loss_qanet = F.nll_loss(log_p1_qanet, y1) + F.nll_loss(log_p2_qanet, y2)

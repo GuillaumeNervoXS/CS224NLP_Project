@@ -74,7 +74,7 @@ def main(args):
                             n_mod_blocks=args.n_mod_blocks)
         
         model_qanet = nn.DataParallel(model_qanet, gpu_ids)
-        log.info(f'Loading checkpoint from {args.load_qanet}...')
+        log.info(f'Loading checkpoint from {args.load_path_qanet}...')
         model_qanet = util.load_model(model_qanet, args.load_path_qanet, gpu_ids, return_step=False)
         model_qanet = model_qanet.to(device)
         model_qanet.eval()

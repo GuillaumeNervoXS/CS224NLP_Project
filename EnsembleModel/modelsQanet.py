@@ -54,6 +54,7 @@ class QANet(nn.Module):
         
         self.emb = layers.EmbeddingQANet(word_vectors=word_vectors,
                                          char_vectors=char_vectors,
+                                         size_char_emb=size_char_emb,
                                          hidden_size=hidden_size,
                                          drop_prob_word=drop_prob_word,
                                          drop_prob_char=drop_prob_char,

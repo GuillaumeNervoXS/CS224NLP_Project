@@ -47,7 +47,7 @@ def main(args):
     log.info('Building model...')
     nbr_model=0
     if(args.load_path_baseline):
-        model_baseline = Baseline(word_vectors=word_vectors,hidden_size=args.hidden_size)
+        model_baseline = BiDAF(word_vectors=word_vectors,hidden_size=args.hidden_size)
         model_baseline = nn.DataParallel(model_baseline, gpu_ids)
         log.info(f'Loading checkpoint from {args.load_path_baseline}...')
         model_baseline = util.load_model(model_baseline, args.load_path_baseline, gpu_ids, return_step=False)
@@ -68,7 +68,7 @@ def main(args):
 
     if(args.load_path_qanet):
         model_qanet = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device,
-                            hidden_size=args.hidden_size, batch_size=args.batch_size ,
+                            hidden_size=args.hidden_size,
                             n_heads=args.n_heads, n_conv_emb=args.n_conv_emb,
                             n_conv_mod=args.n_conv_mod, n_emb_blocks=args.n_emb_blocks,
                             n_mod_blocks=args.n_mod_blocks)

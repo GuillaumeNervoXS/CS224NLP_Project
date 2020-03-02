@@ -161,7 +161,7 @@ def main(args):
         results = util.eval_dicts(gold_dict, pred_dict, args.use_squad_v2)
         if(args.load_path_qanet):
             meter_avg=nll_meter_qanet.avg
-        if(args.load_path_bidaf):
+        elif(args.load_path_bidaf):
             meter_avg=nll_meter_bidaf.avg
         else:
             meter_avg=nll_meter_baseline.avg

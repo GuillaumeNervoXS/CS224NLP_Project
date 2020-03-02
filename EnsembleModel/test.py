@@ -67,8 +67,8 @@ def main(args):
         nbr_model+=1
 
     if(args.load_path_qanet):
-        model_qanet = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device,
-                            hidden_size=args.hidden_size,
+        model_qanet = QANet(word_vectors=word_vectors,char_vectors=char_vectors, size_char_emb=200,
+                            device=device, hidden_size=args.hidden_size,
                             n_heads=args.n_heads, n_conv_emb_enc=args.n_conv_emb,
                             n_conv_mod_enc=args.n_conv_mod, n_emb_enc_blocks=args.n_emb_blocks,
                             n_mod_enc_blocks=args.n_mod_blocks)

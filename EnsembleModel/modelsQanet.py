@@ -35,7 +35,7 @@ class QANet(nn.Module):
         kernel_size (int): Kernel size in the Encoder Blocks
         n_heads (int): Number of heads in the self-attention mechanisms
     """
-    def __init__(self, word_vectors, char_vectors, device,hidden_size=128,
+    def __init__(self, word_vectors, char_vectors, size_char_emb ,device,hidden_size=128,
                  n_emb_enc_blocks=1,n_mod_enc_blocks=7,
                  n_conv_emb_enc=4,n_conv_mod_enc=2,
                  drop_prob_word=0.1,drop_prob_char=0.05,

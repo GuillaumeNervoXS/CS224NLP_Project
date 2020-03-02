@@ -183,17 +183,17 @@ class EmbeddingQANet(nn.Module):
         drop_prob (float): Probability of zero-ing out activations
     """
     
-    def __init__(self, word_vectors, char_vectors, hidden_size, drop_prob_word=0.1, drop_prob_char=0.05, out_channels=100):
+    def __init__(self, word_vectors, char_vectors, size_char_emb, hidden_size, drop_prob_word=0.1, drop_prob_char=0.05, out_channels=100):
         super(EmbeddingQANet, self).__init__()
         self.drop_prob_word = drop_prob_word
         self.drop_prob_char = drop_prob_char
         self.word_emb_dim   = word_vectors.size(1)
-        self.char_emb_dim   = char_vectors.size(1)
+        self.char_emb_dim   = size_char_emb
         self.size_char_vocab = char_vectors.size(0)
         self.out_channels   = out_channels
         
         self.embed_word = nn.Embedding.from_pretrained(word_vectors,freeze=True)
-        self.embed_char = nn.Embedding.from_pretrained(char_vectors,freeze=False)
+        self.embed_char = nn.Embedding(num_embeddings=self.size_char_vocab, embedding_dim=size_char_emb)
         
         self.cnn=CNN(self.char_emb_dim, output_channels=self.out_channels)
         

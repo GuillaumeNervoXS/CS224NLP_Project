@@ -93,6 +93,15 @@ def get_train_args():
     add_common_args(parser)
     add_train_test_args(parser)
 
+    parser.add_argument('--model',
+                        type=str,
+                        default='qanet',
+                        choices=('baseline', 'bidaf', 'qanet'),
+                        help='Which type of model you want to train')
+    parser.add_argument('--load_path',
+                        type=str,
+                        default=None,
+                        help='Path to load a model checkpoint.')
     parser.add_argument('--eval_steps',
                         type=int,
                         default=50000,
@@ -134,9 +143,18 @@ def get_train_args():
                         type=float,
                         default=0.999,
                         help='Decay rate for exponential moving average of parameters.')
-    parser.add_argument('--beta_1', type=float, default=0.8, help='Beta_1 for the Adam Optimizer.')
-    parser.add_argument('--beta_2',type=float,default=0.999,help='Beta_2 for the Adam Optimizer.')
-    parser.add_argument('--epsilon',type=float,default=10e-7,help='Epsilon for the Adam Optimizer.')
+    parser.add_argument('--beta_1', 
+                        type=float,
+                        default=0.8, 
+                        help='Beta_1 for the Adam Optimizer.')
+    parser.add_argument('--beta_2',
+                        type=float,
+                        default=0.999,
+                        help='Beta_2 for the Adam Optimizer.')
+    parser.add_argument('--epsilon',
+                        type=float,
+                        default=10e-7,
+                        help='Epsilon for the Adam Optimizer.')
     
     args = parser.parse_args()
 
@@ -168,11 +186,23 @@ def get_test_args():
                         type=str,
                         default='submission.csv',
                         help='Name for submission file.')
+    parser.add_argument('--load_path_baseline',
+                        type=str,
+                        default=None,
+                        help='Path to load baseline as a model checkpoint.')
+    parser.add_argument('--load_path_bidaf',
+                        type=str,
+                        default=None,
+                        help='Path to load BiDAF as a model checkpoint.')
+    parser.add_argument('--load_path_qanet',
+                        type=str,
+                        default=None,
+                        help='Path to load QANet as a model checkpoint.')
 
     # Require load_path for test.py
     args = parser.parse_args()
     if not (args.load_path_baseline or args.load_path_bidaf or args.load_path_qanet):
-        raise argparse.ArgumentError('Missing required argument --load_path')
+        raise argparse.ArgumentError('Missing required argument --load_path_{model}')
 
     return args
 
@@ -241,29 +271,17 @@ def add_train_test_args(parser):
                         type=int,
                         default=10,
                         help='Number of examples to visualize in TensorBoard.')
-    parser.add_argument('--load_path_baseline',
-                        type=str,
-                        default=None,
-                        help='Path to load baseline as a model checkpoint.')
-    parser.add_argument('--load_path_bidaf',
-                        type=str,
-                        default=None,
-                        help='Path to load BiDAF as a model checkpoint.')
-    parser.add_argument('--load_path_qanet',
-                        type=str,
-                        default=None,
-                        help='Path to load QANet as a model checkpoint.')
     parser.add_argument('--n_emb_blocks',
                         type=int,
                         default=1,
                         help='Number of embedding encoder blocks.')
     parser.add_argument('--n_mod_blocks',
                         type=int,
-                        default=7,
+                        default=4,
                         help='Number of model encoder blocks.')
     parser.add_argument('--n_heads',
                         type=int,
-                        default=8,
+                        default=4,
                         help='Number of heads.')
     parser.add_argument('--n_conv_emb',
                         type=int,
@@ -273,3 +291,7 @@ def add_train_test_args(parser):
                         type=int,
                         default=2,
                         help='Number of convolutional layers in the modeling encoder blocks.')
+    parser.add_argument('--divisor_dim_kqv',
+                        type=int,
+                        default=2,
+                        help='Divisor of the hidden_size to represent queries,keys and values')

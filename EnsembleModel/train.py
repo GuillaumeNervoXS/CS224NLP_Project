@@ -17,7 +17,7 @@ import util
 from args import get_train_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, QANet
+from models import Baseline , BiDAF, QANet 
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ujson import load as json_load
@@ -47,16 +47,22 @@ def main(args):
     # Get model
     log.info('Building model...')
     
-    #model = BiDAF(word_vectors=word_vectors,hidden_size=args.hidden_size,drop_prob=args.drop_prob)
-    model = QANet(word_vectors=word_vectors,char_vectors=char_vectors,device=device,
-                  hidden_size=args.hidden_size,                                                                                          n_emb_enc_blocks=args.n_emb_blocks,n_mod_enc_blocks=args.n_mod_blocks,
-                 n_conv_emb_enc=args.n_conv_emb,n_conv_mod_enc=args.n_conv_mod,
-                 drop_prob_word=0.1,drop_prob_char=0.05,
-                 kernel_size_emb_enc_block=7, kernel_size_mod_enc_block=7,
-                 n_heads=args.n_heads)
+    if(args.model=='baseline'):
+        model = Baseline(word_vectors=word_vectors,hidden_size=args.hidden_size,
+                        drop_prob=args.drop_prob)
+        
+    elif(args.model=='bidaf'):
+        model = BiDAF(word_vectors=word_vectors, char_vectors=char_vectors, 
+                        char_emb_dim=args.char_emb_dim,hidden_size=args.hidden_size,
+                        drop_prob=args.drop_prob)
+        
+    elif(args.model=='qanet'):
+        model = QANet(word_vectors=word_vectors, char_vectors=char_vectors, char_emb_dim=args.char_emb_dim,
+                      hidden_size=args.hidden_size, n_conv_emb_enc=args.n_conv_emb,n_conv_mod_enc=args.n_conv_mod,
+                     drop_prob_word=0.1,drop_prob_char=0.05,kernel_size_emb_enc_block=7,
+                     kernel_size_mod_enc_block=7, n_heads=args.n_heads)
 
-    
-    
+
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
         log.info(f'Loading checkpoint from {args.load_path}...')

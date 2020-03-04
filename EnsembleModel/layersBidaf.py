@@ -23,12 +23,12 @@ class Embedding(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, char_vectors, hidden_size, drop_prob, out_channels=100):
+    def __init__(self, word_vectors, char_vectors, char_emb_dim, hidden_size, drop_prob, out_channels=100):
         super(Embedding, self).__init__()
         self.drop_prob = drop_prob
         self.word_emb_dim   = word_vectors.size(1)
         self.char_emb_dim   = char_vectors.size(1)
-        self.size_char_vocab= char_vectors.size(0)
+        self.size_char_vocab= char_emb_dim
         self.out_channels   = out_channels
         
         self.embed_word = nn.Embedding.from_pretrained(word_vectors)
@@ -199,6 +199,7 @@ class BiDAFAttention(nn.Module):
         self.c_weight = nn.Parameter(torch.zeros(hidden_size, 1))
         self.q_weight = nn.Parameter(torch.zeros(hidden_size, 1))
         self.cq_weight = nn.Parameter(torch.zeros(1, 1, hidden_size))
+        self.fusion   = nn.Linear(4*hidden_size,4*hidden_size)
         for weight in (self.c_weight, self.q_weight, self.cq_weight):
             nn.init.xavier_uniform_(weight)
         self.bias = nn.Parameter(torch.zeros(1))
@@ -218,7 +219,8 @@ class BiDAFAttention(nn.Module):
         b = torch.bmm(torch.bmm(s1, s2.transpose(1, 2)), c)
 
         x = torch.cat([c, a, c * a, c * b], dim=2)  # (bs, c_len, 4 * hid_size)
-
+        x = F.relu(self.fusion(x))
+        
         return x
 
     def get_similarity_matrix(self, c, q):

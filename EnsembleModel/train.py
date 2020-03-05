@@ -53,11 +53,11 @@ def main(args):
         
     elif(args.model=='bidaf'):
         model = BiDAF(word_vectors=word_vectors, char_vectors=char_vectors, 
-                        char_emb_dim=args.char_emb_dim,hidden_size=args.hidden_size,
+                        char_emb_dim=args.char_dim,hidden_size=args.hidden_size,
                         drop_prob=args.drop_prob)
         
     elif(args.model=='qanet'):
-        model = QANet(word_vectors=word_vectors, char_vectors=char_vectors, char_emb_dim=args.char_emb_dim,
+        model = QANet(word_vectors=word_vectors, char_vectors=char_vectors, char_emb_dim=args.char_dim,
                       hidden_size=args.hidden_size, n_conv_emb_enc=args.n_conv_emb,n_conv_mod_enc=args.n_conv_mod,
                      drop_prob_word=0.1,drop_prob_char=0.05,kernel_size_emb_enc_block=7,
                      kernel_size_mod_enc_block=7, n_heads=args.n_heads)

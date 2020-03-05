@@ -230,6 +230,10 @@ def add_train_test_args(parser):
                         type=lambda s: s.lower().startswith('t'),
                         default=True,
                         help='Whether to use SQuAD 2.0 (unanswerable) questions.')
+    parser.add_argument('--char_emb_dim',
+                        type=int,
+                        default=200,
+                        help='Dimension char embeddings')
     parser.add_argument('--hidden_size',
                         type=int,
                         default=100,

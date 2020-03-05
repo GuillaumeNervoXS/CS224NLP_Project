@@ -59,7 +59,7 @@ def get_setup_args():
                         help='Max number of words in a question at test time')
     parser.add_argument('--char_dim',
                         type=int,
-                        default=200,
+                        default=64,
                         help='Size of char vectors (char-level embeddings)')
     parser.add_argument('--glove_dim',
                         type=int,

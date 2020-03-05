@@ -27,8 +27,8 @@ class Embedding(nn.Module):
         super(Embedding, self).__init__()
         self.drop_prob = drop_prob
         self.word_emb_dim   = word_vectors.size(1)
-        self.char_emb_dim   = char_vectors.size(1)
-        self.size_char_vocab= char_emb_dim
+        self.char_emb_dim   = char_emb_dim
+        self.size_char_vocab= char_vectors.size(0)
         self.out_channels   = out_channels
         
         self.embed_word = nn.Embedding.from_pretrained(word_vectors)

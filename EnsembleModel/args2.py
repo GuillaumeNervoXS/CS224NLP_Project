@@ -59,7 +59,7 @@ def get_setup_args():
                         help='Max number of words in a question at test time')
     parser.add_argument('--char_dim',
                         type=int,
-                        default=64,
+                        default=200,
                         help='Size of char vectors (char-level embeddings)')
     parser.add_argument('--glove_dim',
                         type=int,
@@ -266,7 +266,7 @@ def add_train_test_args(parser):
                         help='Whether to use SQuAD 2.0 (unanswerable) questions.')
     parser.add_argument('--hidden_size',
                         type=int,
-                        default=100,
+                        default=128,
                         help='Number of features in encoder hidden layers.')
     parser.add_argument('--num_visuals',
                         type=int,

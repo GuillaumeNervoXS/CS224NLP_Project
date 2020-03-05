@@ -256,8 +256,8 @@ class SelfAttention(nn.Module):
         
     def forward(self, x, mask):        
         batch_size,seq_len,hidden_size=x.size()
-        #mask = mask.unsqueeze(-1).expand(x.shape[0], x.shape[1], x.shape[1]).permute(0,2,1)
-        mask= mask.reshape(1,batch_size,seq_len,1)
+        mask = mask.unsqueeze(-1).expand(x.shape[0], x.shape[1], x.shape[1]).permute(0,2,1)
+        #mask= mask.reshape(1,batch_size,seq_len,1)
 
         #we compute the query, key,value for each self attention
         queries=[self.fc_queries[i](x) for i in range(self.nbr_head_attention)] #list of size nbr_head_attention each of size (batch_size,seq_len,self.dim_query_key_val)
@@ -372,26 +372,32 @@ class EncoderBlock(nn.Module):
         output = self.layer_dropout(output, residual, self.drop_prob*start_index/total_layers)
         return output
 
-
-class QANetOutput(nn.Module):
-    """Output Layer of the QANet model
+class LayerOutput(nn.Module):
+    """
+    Class which represent the 2 last branch of the QANet architecture
+    
+    We use the same class for both predicting the start and the end index
+    of the answer.
+    
+    It consist of taking two matrix as input (which are obtained through encoder 
+    block) of size (batch_size,seq_len,hidden_size), concatenate them along the 
+    last axis and then use Linear layer and softmax to get log probabilities.
+    
+    Args:
+        @hidden_size (int): the hidden size (last dim) of the input matrix
     
     """
-    def __init__(self, hidden_size=128):
-        super(QANetOutput, self).__init__()
-
-        self.hidden_size = hidden_size
-
-        self.W1 = nn.Linear(2*self.hidden_size, 1)
-        self.W2 = nn.Linear(2*self.hidden_size, 1)
-
-        nn.init.xavier_uniform_(self.W1.weight)
-        nn.init.xavier_uniform_(self.W2.weight)
-
-    def forward(self, M0, M1, M2,mask):
-
-        p1 = self.W1(torch.cat((M0,M1), -1)).squeeze() # (batch_size, c_len)
-        p2 = self.W2(torch.cat((M0,M2), -1)).squeeze() # (batch_size, c_len)
-        log_p1 = masked_softmax(p1, mask,log_softmax=True)
-        log_p2 = masked_softmax(p2, mask,log_softmax=True)
-        return log_p1, log_p2
+    
+    def __init__(self,hidden_size,drop_prob):
+        super(LayerOutput,self).__init__()
+        
+        self.fc=nn.Linear(hidden_size,1)
+        nn.init.xavier_uniform_(self.fc.weight)
+    
+    def forward(self,M1,M2,c_mask):
+        
+        M         = torch.cat((M1,M2),dim=-1)
+        scores    = self.fc(M).squeeze()
+        log_probs = masked_softmax(logits=scores,mask=c_mask, log_softmax=True)
+        
+        return log_probs

@@ -204,7 +204,12 @@ class QANet(nn.Module):
                                      kernel_size=kernel_size_mod_enc_block, n_heads=n_heads, 
                                      divisor_dim_kqv=divisor_dim_kqv) for _ in range(n_mod_enc_blocks)])
         
-        self.out = layQ.QANetOutput(hidden_size=hidden_size)
+        
+        self.out_start = layQ.LayerOutput(hidden_size=2*hidden_size,
+                                      drop_prob=0.2)
+        
+        self.out_end   = layQ.LayerOutput(hidden_size=2*hidden_size,
+                                      drop_prob=0.2)
         
 
     def forward(self, cw_idxs,cc_idxs, qw_idxs, qc_idxs):
@@ -233,7 +238,11 @@ class QANet(nn.Module):
         for i,block in enumerate(self.decoder):
             att=block(att,c_mask,i*(self.n_conv_mod_enc+2)+1,self.total_layers_mod_enc)
         M2=att # (batch_size, c_len, hidden_size)
-        out=self.out(M0,M1,M2,c_mask)
+        
+        index_start = self.out_start(M0, M1, c_mask)   #  (batch_size, c_len)
+        index_end   = self.out_end(M1, M2, c_mask)   #  (batch_size, c_len)
+        
+        out=(index_start,index_end)
         
         return out
         

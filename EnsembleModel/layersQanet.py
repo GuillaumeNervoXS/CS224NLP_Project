@@ -427,3 +427,26 @@ class LayerOutputEnd(nn.Module):
         log_probs = masked_softmax(logits=scores_end,mask=c_mask, log_softmax=True)
         
         return log_probs
+
+class QANetOutput(nn.Module):
+    """Output Layer of the QANet model
+    
+    """
+    def __init__(self, hidden_size=128):
+        super(QANetOutput, self).__init__()
+
+        self.hidden_size = hidden_size
+
+        self.W1 = nn.Linear(2*self.hidden_size, 1)
+        self.W2 = nn.Linear(2*self.hidden_size, 1)
+
+        nn.init.xavier_uniform_(self.W1.weight)
+        nn.init.xavier_uniform_(self.W2.weight)
+
+    def forward(self, M0, M1, M2,mask):
+
+        p1 = self.W1(torch.cat((M0,M1), -1)).squeeze() # (batch_size, c_len)
+        p2 = self.W2(torch.cat((M0,M2), -1)).squeeze() # (batch_size, c_len)
+        log_p1 = masked_softmax(p1, mask,log_softmax=True)
+        log_p2 = masked_softmax(p2, mask,log_softmax=True)
+        return log_p1, log_p2

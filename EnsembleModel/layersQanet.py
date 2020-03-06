@@ -392,9 +392,9 @@ class LayerOutputStart(nn.Module):
         self.fc=nn.Linear(hidden_size,1)
         nn.init.xavier_uniform_(self.fc.weight)
     
-    def forward(self,M1,M2,c_mask):
+    def forward(self,M0,M2,c_mask):
         
-        M         = torch.cat((M1,M2),dim=-1)
+        M         = torch.cat((M0,M2),dim=-1)
         scores    = self.fc(M).squeeze()
         log_probs = masked_softmax(logits=scores,mask=c_mask, log_softmax=True)
         
@@ -425,7 +425,7 @@ class LayerOutputEnd(nn.Module):
         
         M         = torch.cat((M1,M2),dim=-1)
         scores_end= self.fc(M)
-        scores_end= self.fc_prob(torch.cat((M,prob_start.unsqueeze(-1)), dim=-1)).squeeze()
+        scores_end= self.fc_prob(torch.cat((scores_end,prob_start.unsqueeze(-1)), dim=-1)).squeeze()
         log_probs = masked_softmax(logits=scores_end,mask=c_mask, log_softmax=True)
         
         return log_probs

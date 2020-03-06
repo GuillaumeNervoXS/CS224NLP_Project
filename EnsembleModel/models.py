@@ -196,7 +196,7 @@ class QANet(nn.Module):
         self.att = layQ.BiDAFAttention(hidden_size=hidden_size,
                                          drop_prob=drop_prob_word)
         
-        self.resize_layer = nn.Conv1d(2 * hidden_size, hidden_size, kernel_size=1)
+        self.resize_layer = nn.Conv1d(4 * hidden_size, hidden_size, kernel_size=1)
 
         self.decoder = nn.ModuleList([layQ.EncoderBlock(n_conv=n_conv_mod_enc,
                                      hidden_size=hidden_size,

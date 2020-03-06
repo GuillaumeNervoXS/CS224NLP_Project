@@ -219,7 +219,7 @@ class QANet(nn.Module):
         c_emb=self.emb(cw_idxs,cc_idxs) # (batch_size, c_len, hidden_size)
 
         q_emb=self.emb(qw_idxs,qc_idxs) # (batch_size, q_len, hidden_size)
-        for i,block in enumerate(self.emb_enc):
+        for i,block in enumerate(self.encoder):
             c_emb = block(c_emb, c_mask, i*(self.n_conv_emb_enc+2)+1, self.total_layers_emb_enc)
             q_emb = block(q_emb, q_mask, i*(self.n_conv_emb_enc+2)+1, self.total_layers_emb_enc)
         

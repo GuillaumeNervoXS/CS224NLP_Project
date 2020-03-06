@@ -372,12 +372,10 @@ class EncoderBlock(nn.Module):
         output = self.layer_dropout(output, residual, self.drop_prob*start_index/total_layers)
         return output
 
-class LayerOutput(nn.Module):
+class LayerOutputStart(nn.Module):
     """
-    Class which represent the 2 last branch of the QANet architecture
+    Class which represent the start_index branch of the QANet architecture
     
-    We use the same class for both predicting the start and the end index
-    of the answer.
     
     It consist of taking two matrix as input (which are obtained through encoder 
     block) of size (batch_size,seq_len,hidden_size), concatenate them along the 
@@ -389,7 +387,7 @@ class LayerOutput(nn.Module):
     """
     
     def __init__(self,hidden_size,drop_prob):
-        super(LayerOutput,self).__init__()
+        super(LayerOutputStart,self).__init__()
         
         self.fc=nn.Linear(hidden_size,1)
         nn.init.xavier_uniform_(self.fc.weight)
@@ -399,5 +397,35 @@ class LayerOutput(nn.Module):
         M         = torch.cat((M1,M2),dim=-1)
         scores    = self.fc(M).squeeze()
         log_probs = masked_softmax(logits=scores,mask=c_mask, log_softmax=True)
+        
+        return log_probs
+
+class LayerOutputEnd(nn.Module):
+    """
+    Class which represent the stop_index branch of the QANet architecture
+    
+    
+    It consist of taking two matrix as input (which are obtained through encoder 
+    block) of size (batch_size,seq_len,hidden_size), concatenate them along the 
+    last axis and then use Linear layer and softmax to get log probabilities.
+    
+    Args:
+        @hidden_size (int): the hidden size (last dim) of the input matrix
+    
+    """
+    
+    def __init__(self,hidden_size,drop_prob):
+        super(LayerOutputEnd,self).__init__()
+        
+        self.fc_reduce=nn.Linear(hidden_size,1)
+        self.fc_prob=nn.Linear(2,1)
+        nn.init.xavier_uniform_(self.fc.weight)
+    
+    def forward(self,M1,M2,prob_start,c_mask):
+        
+        M         = torch.cat((M1,M2),dim=-1)
+        scores_end= self.fc(M)
+        scores_end= self.fc_prob(torch.cat((M,prob_start.unsqueeze(-1)), dim=-1)).squeeze()
+        log_probs = masked_softmax(logits=scores_end,mask=c_mask, log_softmax=True)
         
         return log_probs

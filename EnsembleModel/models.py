@@ -205,10 +205,10 @@ class QANet(nn.Module):
                                      divisor_dim_kqv=divisor_dim_kqv) for _ in range(n_mod_enc_blocks)])
         
         
-        self.out_start = layQ.LayerOutput(hidden_size=2*hidden_size,
+        self.out_start = layQ.LayerOutputStart(hidden_size=2*hidden_size,
                                       drop_prob=0.2)
         
-        self.out_end   = layQ.LayerOutput(hidden_size=2*hidden_size,
+        self.out_end   = layQ.LayerOutputEnd(hidden_size=2*hidden_size,
                                       drop_prob=0.2)
         
 
@@ -240,7 +240,7 @@ class QANet(nn.Module):
         M2=att # (batch_size, c_len, hidden_size)
         
         index_start = self.out_start(M0, M1, c_mask)   #  (batch_size, c_len)
-        index_end   = self.out_end(M1, M2, c_mask)   #  (batch_size, c_len)
+        index_end   = self.out_end(M1, M2, index_start, c_mask)   #  (batch_size, c_len)
         
         out=(index_start,index_end)
         

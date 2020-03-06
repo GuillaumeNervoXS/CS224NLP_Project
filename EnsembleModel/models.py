@@ -182,7 +182,7 @@ class QANet(nn.Module):
         
         self.emb = layQ.Embedding(word_vectors=word_vectors,
                                          char_vectors=char_vectors,
-                                         char_emb_dim=char_emb_dim,
+                                         size_char_emb=char_emb_dim,
                                          hidden_size=hidden_size,
                                          drop_prob_word=drop_prob_word,
                                          drop_prob_char=drop_prob_char,

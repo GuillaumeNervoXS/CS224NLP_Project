@@ -417,7 +417,7 @@ class LayerOutputEnd(nn.Module):
     def __init__(self,hidden_size,drop_prob):
         super(LayerOutputEnd,self).__init__()
         
-        self.fc_reduce=nn.Linear(hidden_size,1)
+        self.fc=nn.Linear(hidden_size,1)
         self.fc_prob=nn.Linear(2,1)
         nn.init.xavier_uniform_(self.fc.weight)
     

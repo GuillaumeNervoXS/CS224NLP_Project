@@ -30,7 +30,7 @@ class Embedding(nn.Module):
         self.drop_prob_char = drop_prob_char
         self.word_emb_dim   = word_vectors.size(1)
         self.char_emb_dim   = size_char_emb
-        self.size_char_vocab = char_vectors.size(0)
+        self.size_char_vocab= char_vectors.size(0)
         self.out_channels   = out_channels
         
         self.embed_word = nn.Embedding.from_pretrained(word_vectors,freeze=True)
@@ -321,7 +321,8 @@ class EncoderBlock(nn.Module):
         self.layer_norm = nn.ModuleList([nn.LayerNorm(hidden_size) for _ in range(n_conv)])
         self.norm_1 = nn.LayerNorm(hidden_size)
         self.norm_2 = nn.LayerNorm(hidden_size)
-        self.ffl = nn.Conv1d(hidden_size, hidden_size, kernel_size=1)
+        self.ffl_1 = nn.Conv1d(hidden_size, 4*hidden_size, kernel_size=1)
+        self.ffl_2 = nn.Conv1d(4*hidden_size, hidden_size, kernel_size=1)
     
     def layer_dropout(self, inputs, residual, dropout):
         if self.training:
@@ -365,7 +366,8 @@ class EncoderBlock(nn.Module):
         output = self.norm_2(output)
         output = F.dropout(output, p=self.drop_prob, training=self.training)
         output=output.permute(0,2,1)
-        output = self.ffl(output)
+        output = F.relu(self.ffl_1(output))
+        output = self.ffl_2(output)
         output=output.permute(0,2,1)
         output = self.layer_dropout(output, residual, self.drop_prob*start_index/total_layers)
         return output
@@ -415,15 +417,17 @@ class LayerOutputEnd(nn.Module):
     def __init__(self,hidden_size,drop_prob):
         super(LayerOutputEnd,self).__init__()
         
-        self.fc=nn.Linear(hidden_size,1)
-        self.fc_prob=nn.Linear(2,1)
+        self.fc=nn.Linear(hidden_size,hidden_size//4)
+        self.highway= HighwayEncoder(num_layers=2,hidden_size=(hidden_size//4+1))
+        self.fc_prob=nn.Linear(hidden_size//4+1,1)
         nn.init.xavier_uniform_(self.fc.weight)
     
     def forward(self,M1,M2,prob_start,c_mask):
         
         M         = torch.cat((M1,M2),dim=-1)
         scores_end= self.fc(M)
-        scores_end= self.fc_prob(torch.cat((scores_end,prob_start.unsqueeze(-1)), dim=-1)).squeeze()
+        scores_highway=self.highway(torch.cat((scores_end,prob_start.unsqueeze(-1)), dim=-1))
+        scores_end= self.fc_prob(scores_highway).squeeze()
         log_probs = masked_softmax(logits=scores_end,mask=c_mask, log_softmax=True)
         
         return log_probs

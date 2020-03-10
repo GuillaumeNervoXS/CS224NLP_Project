@@ -8,12 +8,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from util import masked_softmax, PosEncoder
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from util import masked_softmax, PosEncoder, get_timing_signal
 import numpy as np
 
 
 class Embedding(nn.Module):
-    """Embedding layer used by QANet, with a character-level component.
+    """Embedding layer used by BiDAF, without the character-level component.
 
     Word-level embeddings are further refined using a 2-layer Highway Encoder
     (see `HighwayEncoder` class for details).
@@ -23,47 +24,21 @@ class Embedding(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    
-    def __init__(self, word_vectors, char_vectors, size_char_emb, hidden_size, drop_prob_word=0.1, drop_prob_char=0.05, out_channels=100):
+    def __init__(self, word_vectors, hidden_size, drop_prob):
         super(Embedding, self).__init__()
-        self.drop_prob_word = drop_prob_word
-        self.drop_prob_char = drop_prob_char
-        self.word_emb_dim   = word_vectors.size(1)
-        self.char_emb_dim   = size_char_emb
-        self.size_char_vocab= char_vectors.size(0)
-        self.out_channels   = out_channels
-        
-        self.embed_word = nn.Embedding.from_pretrained(word_vectors,freeze=True)
-        self.embed_char = nn.Embedding(num_embeddings=self.size_char_vocab, embedding_dim=size_char_emb)
-        
-        self.cnn=CNN(self.char_emb_dim, output_channels=self.out_channels)
-        
-        self.proj = nn.Linear(self.word_emb_dim+self.out_channels, hidden_size, bias=False)
+        self.drop_prob = drop_prob
+        self.embed = nn.Embedding.from_pretrained(word_vectors)
+        self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
         self.hwy = HighwayEncoder(2, hidden_size)
 
-    def forward(self, x_word , x_char):
-        emb_w = self.embed_word(x_word)   # (batch_size, seq_len, word_emb_dim)
-        emb_w = F.dropout(emb_w, self.drop_prob_word, self.training)
-        
-        emb_c = self.embed_char(x_char)   # (batch_size, seq_len, word_len ,char_emb_dim)
-        
-        #use cnn to have character level representation
-        batch_size, seq_len, word_len, _ = emb_c.shape
-        view_shape = (batch_size * seq_len, word_len, self.char_emb_dim)
-        emb_c      = emb_c.view(view_shape).transpose(1,2)
-        emb_c = F.dropout(emb_c, self.drop_prob_char, self.training)
-        emb_c_conv = self.cnn(emb_c)
-        emb_c_conv = emb_c_conv.view(batch_size, seq_len, self.out_channels)
-        
-        #concatenate both embedding with the righ dim
-        emb = torch.cat((emb_w,emb_c_conv),dim=-1)
-        
-
+    def forward(self, x):
+        emb = self.embed(x)   # (batch_size, seq_len, embed_size)
+        emb = F.dropout(emb, self.drop_prob, self.training)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
         return emb
-       
+
 
 class HighwayEncoder(nn.Module):
     """Encode an input sequence using a highway network.
@@ -94,6 +69,52 @@ class HighwayEncoder(nn.Module):
         return x
 
 
+class RNNEncoder(nn.Module):
+    """General-purpose layer for encoding a sequence using a bidirectional RNN.
+
+    Encoded output is the RNN's hidden state at each position, which
+    has shape `(batch_size, seq_len, hidden_size * 2)`.
+
+    Args:
+        input_size (int): Size of a single timestep in the input.
+        hidden_size (int): Size of the RNN hidden state.
+        num_layers (int): Number of layers of RNN cells to use.
+        drop_prob (float): Probability of zero-ing out activations.
+    """
+    def __init__(self,
+                 input_size,
+                 hidden_size,
+                 num_layers,
+                 drop_prob=0.):
+        super(RNNEncoder, self).__init__()
+        self.drop_prob = drop_prob
+        self.rnn = nn.LSTM(input_size, hidden_size, num_layers,
+                           batch_first=True,
+                           bidirectional=True,
+                           dropout=drop_prob if num_layers > 1 else 0.)
+
+    def forward(self, x, lengths):
+        # Save original padded length for use by pad_packed_sequence
+        orig_len = x.size(1)
+
+        # Sort by length and pack sequence for RNN
+        lengths, sort_idx = lengths.sort(0, descending=True)
+        x = x[sort_idx]     # (batch_size, seq_len, input_size)
+        x = pack_padded_sequence(x, lengths, batch_first=True)
+
+        # Apply RNN
+        x, _ = self.rnn(x)  # (batch_size, seq_len, 2 * hidden_size)
+
+        # Unpack and reverse sort
+        x, _ = pad_packed_sequence(x, batch_first=True, total_length=orig_len)
+        _, unsort_idx = sort_idx.sort(0)
+        x = x[unsort_idx]   # (batch_size, seq_len, 2 * hidden_size)
+
+        # Apply dropout (RNN applies dropout after all but the last layer)
+        x = F.dropout(x, self.drop_prob, self.training)
+
+        return x
+
 
 class BiDAFAttention(nn.Module):
     """Bidirectional attention originally used by BiDAF.
@@ -107,15 +128,15 @@ class BiDAFAttention(nn.Module):
     The output has shape (batch_size, context_len, 8 * hidden_size).
 
     Args:
-        @hidden_size (int): Size of hidden activations.
-        @drop_prob (float): Probability of zero-ing out activations.
+        hidden_size (int): Size of hidden activations.
+        drop_prob (float): Probability of zero-ing out activations.
     """
     def __init__(self, hidden_size, drop_prob=0.1):
         super(BiDAFAttention, self).__init__()
         self.drop_prob = drop_prob
         self.c_weight = nn.Parameter(torch.zeros(hidden_size, 1))
         self.q_weight = nn.Parameter(torch.zeros(hidden_size, 1))
-        self.cq_weight= nn.Parameter(torch.zeros(1, 1, hidden_size))
+        self.cq_weight = nn.Parameter(torch.zeros(1, 1, hidden_size))
         for weight in (self.c_weight, self.q_weight, self.cq_weight):
             nn.init.xavier_uniform_(weight)
         self.bias = nn.Parameter(torch.zeros(1))
@@ -135,7 +156,7 @@ class BiDAFAttention(nn.Module):
         b = torch.bmm(torch.bmm(s1, s2.transpose(1, 2)), c)
 
         x = torch.cat([c, a, c * a, c * b], dim=2)  # (bs, c_len, 4 * hid_size)
-        
+
         return x
 
     def get_similarity_matrix(self, c, q):
@@ -162,6 +183,65 @@ class BiDAFAttention(nn.Module):
 
         return s
 
+
+class BiDAFOutput(nn.Module):
+    """Output layer used by BiDAF for question answering.
+
+    Computes a linear transformation of the attention and modeling
+    outputs, then takes the softmax of the result to get the start pointer.
+    A bidirectional LSTM is then applied the modeling output to produce `mod_2`.
+    A second linear+softmax of the attention output and `mod_2` is used
+    to get the end pointer.
+
+    Args:
+        hidden_size (int): Hidden size used in the BiDAF model.
+        drop_prob (float): Probability of zero-ing out activations.
+    """
+    def __init__(self, hidden_size, drop_prob):
+        super(BiDAFOutput, self).__init__()
+        self.att_linear_1 = nn.Linear(8 * hidden_size, 1)
+        self.mod_linear_1 = nn.Linear(2 * hidden_size, 1)
+
+        self.rnn = RNNEncoder(input_size=2 * hidden_size,
+                              hidden_size=hidden_size,
+                              num_layers=1,
+                              drop_prob=drop_prob)
+
+        self.att_linear_2 = nn.Linear(8 * hidden_size, 1)
+        self.mod_linear_2 = nn.Linear(2 * hidden_size, 1)
+
+    def forward(self, att, mod, mask):
+        # Shapes: (batch_size, seq_len, 1)
+        logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
+        mod_2 = self.rnn(mod, mask.sum(-1))
+        logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod_2)
+
+        # Shapes: (batch_size, seq_len)
+        log_p1 = masked_softmax(logits_1.squeeze(), mask, log_softmax=True)
+        log_p2 = masked_softmax(logits_2.squeeze(), mask, log_softmax=True)
+
+        return log_p1, log_p2
+
+#Below this line: layers used by the QANet model
+
+class DepthwiseSeparableConv(nn.Module):
+    """
+    Depthwise separable convolutions used in the QANet paper
+    Info on this type of convolutions here: 
+    https://towardsdatascience.com/a-basic-introduction-to-separable-convolutions-b99ec3102728
+    Args:
+        in_channels (int):  # of in_channels of the convolution
+        out_channels (int): # of in_channels of the convolution
+    """
+    def __init__(self, in_channels, out_channels, k, bias=True):
+        super(DepthwiseSeparableConv,self).__init__()
+        self.depthwise_conv = nn.Conv1d(in_channels=in_channels, out_channels=in_channels, kernel_size=k, groups=in_channels, padding=k // 2, bias=False)
+        self.pointwise_conv = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, padding=0, bias=bias)
+        
+    def forward(self, x):
+        x=x.permute(0,2,1)
+        x=F.relu(self.pointwise_conv(self.depthwise_conv(x)))
+        return x.permute(0,2,1)
 
 class CNN(nn.Module):
     """
@@ -201,28 +281,61 @@ class CNN(nn.Module):
         x_conv_out,_=torch.max(x_conv,-1)
         
         return x_conv_out
-
-
-class DepthwiseSeparableConv(nn.Module):
-    """
-    Depthwise separable convolutions used in the QANet paper
-    Info on this type of convolutions here: 
-    https://towardsdatascience.com/a-basic-introduction-to-separable-convolutions-b99ec3102728
-    Args:
-        in_channels (int):  # of in_channels of the convolution
-        out_channels (int): # of in_channels of the convolution
-    """
-    def __init__(self, in_channels, out_channels, k, bias=True):
-        super(DepthwiseSeparableConv,self).__init__()
-        self.depthwise_conv = nn.Conv1d(in_channels=in_channels, out_channels=in_channels, kernel_size=k, groups=in_channels, padding=k // 2, bias=False)
-        self.pointwise_conv = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, padding=0, bias=bias)
-        
-    def forward(self, x):
-        x=x.permute(0,2,1)
-        x=F.relu(self.pointwise_conv(self.depthwise_conv(x)))
-        return x.permute(0,2,1)
-  
     
+
+class EmbeddingQANet(nn.Module):
+    """Embedding layer used by QANet, with a character-level component.
+
+    Word-level embeddings are further refined using a 2-layer Highway Encoder
+    (see `HighwayEncoder` class for details).
+
+    Args:
+        word_vectors (torch.Tensor): Pre-trained word vectors.
+        hidden_size (int): Size of hidden activations.
+        drop_prob (float): Probability of zero-ing out activations
+    """
+    
+    def __init__(self, word_vectors, char_vectors, char_emb_dim,
+                 hidden_size, drop_prob_word=0.1, drop_prob_char=0.05, out_channels=100):
+        super(EmbeddingQANet, self).__init__()
+        self.drop_prob_word = drop_prob_word
+        self.drop_prob_char = drop_prob_char
+        self.word_emb_dim   = word_vectors.size(1)
+        self.char_emb_dim   = char_emb_dim
+        self.size_char_vocab = char_vectors.size(0)
+        self.out_channels   = out_channels
+        
+        self.embed_word = nn.Embedding.from_pretrained(word_vectors,freeze=True)
+        self.embed_char = nn.Embedding(num_embeddings=self.size_char_vocab, embedding_dim=self.char_emb_dim)
+        
+        self.cnn=CNN(self.char_emb_dim, output_channels=self.out_channels)
+        
+        self.proj = nn.Linear(self.word_emb_dim+self.out_channels, hidden_size, bias=False)
+        self.hwy = HighwayEncoder(2, hidden_size)
+
+    def forward(self, x_word , x_char):
+        emb_w = self.embed_word(x_word)   # (batch_size, seq_len, word_emb_dim)
+        emb_w = F.dropout(emb_w, self.drop_prob_word, self.training)
+        
+        emb_c = self.embed_char(x_char)   # (batch_size, seq_len, word_len ,char_emb_dim)
+        
+        #use cnn to have character level representation
+        batch_size, seq_len, word_len, _ = emb_c.shape
+        view_shape = (batch_size * seq_len, word_len, self.char_emb_dim)
+        emb_c      = emb_c.view(view_shape).transpose(1,2)
+        emb_c = F.dropout(emb_c, self.drop_prob_char, self.training)
+        emb_c_conv = self.cnn(emb_c)
+        emb_c_conv = emb_c_conv.view(batch_size, seq_len, self.out_channels)
+        
+        #concatenate both embedding with the righ dim
+        emb = torch.cat((emb_w,emb_c_conv),dim=-1)
+        
+
+        emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
+        emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
+
+        return emb
+       
 class SelfAttention(nn.Module):
     """Self-attention mechanism used in the Encoder Block
     Multi-head attention mechanism defined in the Transformer paper which,
@@ -233,73 +346,73 @@ class SelfAttention(nn.Module):
     Args:
         hidden_size (int): Size of hidden activations.
     """
-    def __init__(self,hidden_size=128,n_heads=8,divisor_dim_kqv=8,drop_prob=0.1):
+    def __init__(self,device,hidden_size=128,n_heads=8):
         super(SelfAttention,self).__init__()
-        self.hidden_size=hidden_size
-        self.nbr_head_attention = n_heads
-        self.dim_query_key_val=hidden_size//divisor_dim_kqv
-        
-        self.fc_queries=nn.ModuleList([nn.Linear(hidden_size,self.dim_query_key_val) \
-                                       for _ in range(self.nbr_head_attention)])
-        self.fc_keys=nn.ModuleList([nn.Linear(hidden_size,self.dim_query_key_val) \
-                                    for _ in range(self.nbr_head_attention)])
-        self.fc_values=nn.ModuleList([nn.Linear(hidden_size,self.dim_query_key_val) \
-                                      for _ in range(self.nbr_head_attention)])
-        
-        self.dropout  =nn.Dropout(p=drop_prob)
-        #we use the same projection as the previous step give us some kind of language 
-        #and therefore we only retranscript in a smaller dimension so should be the same process at
-        #every step. We can discuss about that
-        self.proj_multihead=nn.Linear(self.nbr_head_attention*self.dim_query_key_val,hidden_size)
-        
-    def forward(self, x, mask):        
-        batch_size,seq_len,hidden_size=x.size()
+        self.hidden_size = hidden_size
+        self.n_heads = n_heads
+        self.device=device
+        self.key_dim = hidden_size // n_heads
+        self.value_dim = hidden_size // n_heads
+        self.map_query = nn.ModuleList([nn.Linear(hidden_size, self.key_dim) for i in range(n_heads)])
+        self.map_key = nn.ModuleList([nn.Linear(hidden_size, self.key_dim) for i in range(n_heads)])
+        self.map_value = nn.ModuleList([nn.Linear(hidden_size, self.value_dim) for i in range(n_heads)])
+        self.attention_out = nn.Linear(n_heads * self.value_dim, hidden_size)
+
+    def forward(self, x, mask):
+        #print(mask.shape)
+        #print(x.shape)
+        batch_size = x.shape[0]
+        l = x.shape[1]
         mask = mask.unsqueeze(-1).expand(x.shape[0], x.shape[1], x.shape[1]).permute(0,2,1)
-        #mask= mask.reshape(1,batch_size,seq_len,1)
+        heads = torch.zeros(self.n_heads, batch_size, l, self.value_dim, device=self.device)
 
-        #we compute the query, key,value for each self attention
-        queries=[self.fc_queries[i](x) for i in range(self.nbr_head_attention)] #list of size nbr_head_attention each of size (batch_size,seq_len,self.dim_query_key_val)
-        keys   =[self.fc_keys[i](x) for i in range(self.nbr_head_attention)]       #list of size nbr_head_attention each of size (batch_size,seq_len,self.dim_query_key_val)
-        values =[self.fc_values[i](x) for i in range(self.nbr_head_attention)]   #list of size nbr_head_attention each of size (batch_size,seq_len,self.dim_query_key_val)
-        
-        #we concatenate each query,key,values for efficiency
-        queries=torch.stack(queries,dim=0) #(nbr_head,batch_size,seq_len,self.dim_query_key_val)
-        keys   =torch.stack(keys,dim=0)    #(nbr_head,batch_size,seq_len,self.dim_query_key_val)
-        values =torch.stack(values,dim=0)  #(nbr_head,batch_size,seq_len,self.dim_query_key_val)
-        
+        for i in range(self.n_heads):
+            Q = self.map_query[i](x)
+            K = self.map_key[i](x)
+            V = self.map_value[i](x)
 
-        #we directly reshape queries and keys to use bmm
-        queries=queries.reshape(self.nbr_head_attention*batch_size,seq_len,self.dim_query_key_val)
-        keys   =keys.reshape(self.nbr_head_attention*batch_size,seq_len,self.dim_query_key_val)
-        values =values.reshape(self.nbr_head_attention*batch_size,seq_len,self.dim_query_key_val)
+            # scaled dot-product attention
+            tmp = torch.bmm(Q, K.permute(0,2,1))
+            tmp = tmp / np.sqrt(self.key_dim)
+            tmp = masked_softmax(tmp, mask,dim=-1)
+            tmp = F.dropout(tmp, p=0.1, training=self.training)
 
+            heads[i] = torch.bmm(tmp, V)
 
-        #we then compute scores for each combination of query,key 
-        scores=torch.bmm(queries,keys.transpose(1,2))/np.sqrt(self.dim_query_key_val) #(nbr_head*batch_size,seq_len,seq_len)
-        #we need to reshape the mask, I am not sure about this line maybe just repeat 
-        #the mask instead of using broadcasting.
-        scores=scores.reshape(self.nbr_head_attention,batch_size,seq_len,seq_len)
-        scores_softmax=masked_softmax(scores,mask,dim=3) #(nbr_head,batch_size,seq_len,seq_len)
-        scores_softmax=scores_softmax.reshape(self.nbr_head_attention*batch_size,seq_len,seq_len)
-        
-        scores_softmax_drop=self.dropout(scores_softmax)
-        
-        #compute the waighted average of the values thanks to the scores
-        self_attented_values= torch.bmm(scores_softmax_drop,values) #(nbr_head*batch_size,seq_len,self.dim_query_key_val)
-        
-        #we then concatenate the multi attention along the last dim to apply the fc to get an output of the same
-        #size as the input
-        self_attented_values=self_attented_values.reshape(self.nbr_head_attention,
-                                                          batch_size,seq_len,self.dim_query_key_val).permute(1,2,3,0)
-        self_attented_values=self_attented_values.reshape(batch_size,seq_len,
-                                                          self.dim_query_key_val*self.nbr_head_attention)
-        
-        #projection to smaller dim to have a single vector for each dimension
-        x=self.proj_multihead(self_attented_values)
-        
+        # concatenation is the same as reshaping our tensor
+        x = heads.permute(1,2,0,3).contiguous().view(batch_size, l, -1) #Check if dimensions ok
+        x = self.attention_out(x)
+
         return x
 
+class PositionEncoding(nn.Module):
+    def __init__(self, device, hidden_size=128, min_timescale=1.0, max_timescale=1.0e4):
 
+        super(PositionEncoding, self).__init__()
+
+        self.min_timescale = min_timescale
+        self.max_timescale = max_timescale
+        self.d = hidden_size
+        self.device=device
+        # we use the fact that cos(x) = sin(x + pi/2) to compute everything with one sin statement
+        self.freqs = torch.Tensor(
+            [max_timescale ** (-i / self.d) if i % 2 == 0 else max_timescale ** (-(i - 1) / self.d) for i in
+             range(self.d)]).unsqueeze(1).to(device)
+        self.phases = torch.Tensor([0 if i % 2 == 0 else np.pi / 2 for i in range(self.d)]).unsqueeze(1).to(device)
+
+    def forward(self, x):
+
+        x=x.permute(0,2,1)
+        l = x.shape[-1]
+        
+        # computing signal
+        pos = torch.arange(l, dtype=torch.float32).repeat(self.d, 1).to(self.device)
+        tmp = pos * self.freqs + self.phases
+        pos_enc = torch.sin(tmp)
+        x = x + pos_enc
+        x=x.permute(0,2,1)
+        return x
+    
 class EncoderBlock(nn.Module):
     """ Encoder Block of the QANet model
     Args: 
@@ -309,20 +422,22 @@ class EncoderBlock(nn.Module):
         hidden_size (int) (default=128)
         n_heads (int) (default=8)
     """
-    def __init__(self, n_conv, hidden_size,drop_prob=0.1, kernel_size=7, n_heads=8, divisor_dim_kqv=8):
+    def __init__(self, n_conv, device, hidden_size,drop_prob=0.1, kernel_size=7, n_heads=8):
         super(EncoderBlock,self).__init__()
         self.n_conv = n_conv
         self.hidden_size = hidden_size
         self.drop_prob=drop_prob
         
-        self.conv = nn.ModuleList([DepthwiseSeparableConv(in_channels=hidden_size, out_channels=hidden_size, 
-                                                          k=kernel_size) for _ in range(n_conv)])
-        self.self_att = SelfAttention(hidden_size=hidden_size,n_heads=n_heads, divisor_dim_kqv=divisor_dim_kqv)
+        self.pos_encoding=PositionEncoding(device=device,hidden_size=hidden_size)
+        self.conv = nn.ModuleList([DepthwiseSeparableConv(hidden_size, hidden_size, kernel_size) for _ in range(n_conv)])
+        self.self_att = SelfAttention(device,hidden_size,n_heads)
         self.layer_norm = nn.ModuleList([nn.LayerNorm(hidden_size) for _ in range(n_conv)])
         self.norm_1 = nn.LayerNorm(hidden_size)
         self.norm_2 = nn.LayerNorm(hidden_size)
         self.ffl = nn.Conv1d(hidden_size, hidden_size, kernel_size=1)
+        #self.ffl2 = nn.Conv1d(hidden_size, hidden_size, kernel_size=1) To be added: a second FF layer after the first one as an idea
     
+
     def layer_dropout(self, inputs, residual, dropout):
         if self.training:
             if torch.rand(1) > dropout:
@@ -338,7 +453,7 @@ class EncoderBlock(nn.Module):
         x has shape (batch_size, seq_len, hidden_size)
         """
         #total_layers = (self.conv_num+1)*n_blocks
-        output = PosEncoder(x)
+        output = self.pos_encoding(x)
         
         #Convolutional Layers
         for i in range(self.n_conv):
@@ -394,61 +509,15 @@ class QANetOutput(nn.Module):
         log_p2 = masked_softmax(p2, mask,log_softmax=True)
         return log_p1, log_p2
 
-
-class LayerOutputStart(nn.Module):
-    """
-    Class which represent the start_index branch of the QANet architecture
     
-    
-    It consist of taking two matrix as input (which are obtained through encoder 
-    block) of size (batch_size,seq_len,hidden_size), concatenate them along the 
-    last axis and then use Linear layer and softmax to get log probabilities.
-    
-    Args:
-        @hidden_size (int): the hidden size (last dim) of the input matrix
-    
-    """
-    
-    def __init__(self,hidden_size,drop_prob):
-        super(LayerOutputStart,self).__init__()
         
-        self.fc=nn.Linear(hidden_size,1)
-        nn.init.xavier_uniform_(self.fc.weight)
-    
-    def forward(self,M0,M2,c_mask):
         
-        M         = torch.cat((M0,M2),dim=-1)
-        scores    = self.fc(M).squeeze()
-        log_probs = masked_softmax(logits=scores,mask=c_mask, log_softmax=True)
         
-        return log_probs
-
-class LayerOutputEnd(nn.Module):
-    """
-    Class which represent the stop_index branch of the QANet architecture
-    
-    
-    It consist of taking two matrix as input (which are obtained through encoder 
-    block) of size (batch_size,seq_len,hidden_size), concatenate them along the 
-    last axis and then use Linear layer and softmax to get log probabilities.
-    
-    Args:
-        @hidden_size (int): the hidden size (last dim) of the input matrix
-    
-    """
-    
-    def __init__(self,hidden_size,drop_prob):
-        super(LayerOutputEnd,self).__init__()
         
-        self.fc=nn.Linear(hidden_size,1)
-        self.fc_prob=nn.Linear(2,1)
-        nn.init.xavier_uniform_(self.fc.weight)
-    
-    def forward(self,M1,M2,prob_start,c_mask):
         
-        M         = torch.cat((M1,M2),dim=-1)
-        scores_end= self.fc(M)
-        scores_end= self.fc_prob(torch.cat((scores_end,prob_start.unsqueeze(-1)), dim=-1)).squeeze()
-        log_probs = masked_softmax(logits=scores_end,mask=c_mask, log_softmax=True)
         
-        return log_probs
+        
+        
+        
+        
+        

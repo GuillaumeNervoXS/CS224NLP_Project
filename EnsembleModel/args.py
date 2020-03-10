@@ -194,14 +194,40 @@ def get_test_args():
                         type=str,
                         default=None,
                         help='Path to load BiDAF as a model checkpoint.')
+    parser.add_argument('--load_path_bidaf_fusion',
+                        type=str,
+                        default=None,
+                        help='Path to load BiDAF-fusion as a model checkpoint.')
+    
     parser.add_argument('--load_path_qanet',
                         type=str,
                         default=None,
                         help='Path to load QANet as a model checkpoint.')
+    parser.add_argument('--load_path_qanet_old',
+                        type=str,
+                        default=None,
+                        help='Path to load the old version QANet as a model checkpoint.')
+
+    parser.add_argument('--load_path_qanet_inde',
+                        type=str,
+                        default=None,
+                        help='Path to load QANet with the 3 independant decoder as a model checkpoint.')
+    parser.add_argument('--load_path_qanet_s_e',
+                        type=str,
+                        default=None,
+                        help='Path to load QANet, where we feed the start probs as in\
+                              as input to the end output path, a model checkpoint.')
+    parser.add_argument('--save_probabilities',
+                        type=bool,
+                        default=False,
+                        help='Whether to save the probabilities p_start and p_end')
+    
 
     # Require load_path for test.py
     args = parser.parse_args()
-    if not (args.load_path_baseline or args.load_path_bidaf or args.load_path_qanet):
+    if not (args.load_path_baseline or args.load_path_bidaf or args.load_path_bidaf_fusion 
+              or args.load_path_qanet or args.load_path_qanet_inde or args.load_path_qanet_s_e
+              or args.load_path_qanet_old):
         raise argparse.ArgumentError('Missing required argument --load_path_{model}')
 
     return args

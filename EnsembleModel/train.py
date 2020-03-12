@@ -67,6 +67,14 @@ def main(args):
                      kernel_size_mod_enc_block=7, n_heads=args.n_heads)
         optimizer=optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta_1, args.beta_2),
                           eps=args.epsilon, weight_decay=args.l2_wd)
+    
+    elif(args.model=='qanet_out'):
+        model = QANet(word_vectors=word_vectors, char_vectors=char_vectors, char_emb_dim=args.char_emb_dim,
+                      hidden_size=args.hidden_size, n_conv_emb_enc=args.n_conv_emb,n_conv_mod_enc=args.n_conv_mod,
+                     drop_prob_word=0.1,drop_prob_char=0.05,kernel_size_emb_enc_block=7,
+                     kernel_size_mod_enc_block=7, n_heads=args.n_heads)
+        optimizer=optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta_1, args.beta_2),
+                          eps=args.epsilon, weight_decay=args.l2_wd)
 
 
     model = nn.DataParallel(model, args.gpu_ids)

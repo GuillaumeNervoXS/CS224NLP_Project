@@ -97,7 +97,7 @@ def get_train_args():
     parser.add_argument('--model',
                         type=str,
                         default='qanet',
-                        choices=('baseline', 'bidaf', 'qanet'),
+                        choices=('baseline', 'bidaf', 'qanet','qanet_out'),
                         help='Which type of model you want to train')
     parser.add_argument('--load_path',
                         type=str,

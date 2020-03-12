@@ -96,7 +96,7 @@ def get_train_args():
     parser.add_argument('--model',
                         type=str,
                         default='qanet',
-                        choices=('baseline', 'bidaf', 'qanet'),
+                        choices=('baseline', 'bidaf', 'qanet','qanet_out'),
                         help='Which type of model you want to train')
     parser.add_argument('--load_path',
                         type=str,
@@ -225,11 +225,12 @@ def get_test_args():
 
     # Require load_path for test.py
     args = parser.parse_args()
+    """
     if not (args.load_path_baseline or args.load_path_bidaf or args.load_path_bidaf_fusion 
               or args.load_path_qanet or args.load_path_qanet_inde or args.load_path_qanet_s_e
               or args.load_path_qanet_old):
         raise argparse.ArgumentError('Missing required argument --load_path_{model}')
-
+    """
     return args
 
 
@@ -266,7 +267,7 @@ def add_train_test_args(parser):
     parser.add_argument('--name',
                         '-n',
                         type=str,
-                        required=True,
+                        #required=True,
                         help='Name to identify training or test run.')
     parser.add_argument('--max_ans_len',
                         type=int,
